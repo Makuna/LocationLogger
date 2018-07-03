@@ -1,6 +1,8 @@
 
 #include <SoftwareSerial.h>
 
+#define READINGS_SIZE 10
+
 #define NMEA_MESSAGE_BUFFER_SIZE 13
 #define NMEA_MESSAGE_READ_PIN 8
 #define NMEA_MESSAGE_WRITE_PIN 12
@@ -29,7 +31,7 @@ struct GpsReading
     char satelliteCount[3];
 };
 
-typedef void(*GpsReadingComplete)(const GpsReading& reading);
+typedef void(*GpsReadingComplete)(const GpsReading* readings, uint8_t count);
 
 class TaskGps : public Task
 {
@@ -37,6 +39,7 @@ public:
     TaskGps(GpsReadingComplete function) : // pass any custom arguments you need
         Task(10), // check every 10 ms
         callback(function),
+        activeReadingIndex(0),
         bufferIndex(0),
         segment(-1),
         sentence(NMEA_Unknown),
@@ -44,12 +47,15 @@ public:
     { 
     };
 
+
+
 private:
     // put member variables here that are scoped to this object
     GpsReadingComplete callback;
     SoftwareSerial gps;
    
-    GpsReading activeReading;
+    GpsReading readings[READINGS_SIZE];
+    uint8_t activeReadingIndex;
 
     char segmentBuffer[NMEA_MESSAGE_BUFFER_SIZE];
     int8_t bufferIndex;
@@ -61,7 +67,26 @@ private:
         // put code here that will be run when the task starts
         gps.begin(9600);
 
+        // init state 
+        activeReadingIndex = 0;
+        bufferIndex = 0;
+        segment = -1;
+        sentence = NMEA_Unknown;
+
         return true;
+    }
+
+    virtual void OnStop() // optional
+    {
+        // put code here that will be run when the task stops
+        gps.end();
+
+        // if we have any readings when asked to stop
+        if (activeReadingIndex)
+        {
+            // inform callback on number of readings we have
+            callback(readings, activeReadingIndex);
+        }
     }
 
     virtual void OnUpdate(uint32_t deltaTime)
@@ -77,7 +102,12 @@ private:
                 {
                     if (IdentifiedSentence())
                     {
-                        callback(activeReading);
+                        activeReadingIndex++;
+                        if (activeReadingIndex == READINGS_SIZE)
+                        {
+                            activeReadingIndex = 0;
+                            callback(readings, READINGS_SIZE);
+                        }
                     }
                 }
                 else
@@ -164,29 +194,29 @@ private:
             switch (segment) 
             {
             case 1: // time
-                strcpy(activeReading.time, segmentBuffer);
+                strcpy(readings[activeReadingIndex].time, segmentBuffer);
                 // Serial.print("Time = ");
                 // Serial.println(segmentBuffer);
                 break;
             case 2: // fix quality
                 break;
             case 3: // latitude
-                strcpy(activeReading.latitude, segmentBuffer);
+                strcpy(readings[activeReadingIndex].latitude, segmentBuffer);
                 // Serial.print("Latitude = ");
                 // Serial.println(segmentBuffer);
                 break;
             case 4: // latitude direction
-                strcpy(activeReading.latitudeDirection, segmentBuffer);
+                strcpy(readings[activeReadingIndex].latitudeDirection, segmentBuffer);
                 // Serial.print("Latitude direction = ");
                 // Serial.println(segmentBuffer);
                 break;
             case 5: // longitude
-                strcpy(activeReading.longitude, segmentBuffer);
+                strcpy(readings[activeReadingIndex].longitude, segmentBuffer);
                 // Serial.print("Longitude = ");
                 // Serial.println(segmentBuffer);
                 break;
             case 6: // longitude direction
-                strcpy(activeReading.longitudeDirection, segmentBuffer);
+                strcpy(readings[activeReadingIndex].longitudeDirection, segmentBuffer);
                 // Serial.print("Longitude direction = ");
                 // Serial.println(segmentBuffer);
                 break;
@@ -194,7 +224,7 @@ private:
             case 8: // ?
                 break;
             case 9: // date
-                strcpy(activeReading.date, segmentBuffer);
+                strcpy(readings[activeReadingIndex].date, segmentBuffer);
                 // Serial.print("Date = ");
                 // Serial.println(segmentBuffer);
                 break;
@@ -216,14 +246,14 @@ private:
             case 6: // ?
                 break;
             case 7: // number of satellites
-                strcpy(activeReading.satelliteCount, segmentBuffer);
+                strcpy(readings[activeReadingIndex].satelliteCount, segmentBuffer);
                 // Serial.print("Satellites = ");
                 // Serial.println(segmentBuffer);
                 break;
             case 8: // ?
                 break;
             case 9: // altitude
-                strcpy(activeReading.altitude, segmentBuffer);
+                strcpy(readings[activeReadingIndex].altitude, segmentBuffer);
                 // Serial.print("Altitude = ");
                 // Serial.println(segmentBuffer);
                 break;

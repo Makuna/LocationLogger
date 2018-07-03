@@ -7,7 +7,7 @@
 #include "TaskStatusLed.h"  
 #include "TaskGps.h"
 
-#define READINGS_SIZE 3
+
 
 #define LOGGING_SWITCH_PIN 9
 
@@ -17,18 +17,13 @@
 
 
 // foreward delcare functions passed to task constructors
-void OnGpsReadingComplete(const GpsReading& reading); 
+void OnGpsReadingComplete(const GpsReading* readings, uint8_t count); 
 
 TaskManager taskManager;
 
 TaskStatusLed taskStatusLed;
 TaskGps taskGps(OnGpsReadingComplete);
 
-
-GpsReading readings[READINGS_SIZE];
-uint8_t readingIndex = 0;
-
-char fileName[] = "000000-0.CSV";
 
 SdFat sd;
 SdFile logFile;
@@ -66,19 +61,7 @@ void loop()
   taskManager.Loop();
 }
 
-void OnGpsReadingComplete(const GpsReading& reading)
-{
-	readings[readingIndex] = reading;
-	readingIndex++;
-
-	if (readingIndex == READINGS_SIZE)
-	{
-		readingIndex = 0;
-		LogPositions(READINGS_SIZE);
-	}
-}
-
-void LogPositions(int readingCount) 
+void OnGpsReadingComplete(const GpsReading* readings, uint8_t readingCount)
 {
 #ifdef SERIAL_DEBUG
   Serial.println(F("Writing readings..."));
@@ -91,7 +74,7 @@ void LogPositions(int readingCount)
   for (int i = 0; i < readingCount; i++) 
   {
     if (readings[i].time[0] != lastHourWritten[0] || readings[i].time[1] != lastHourWritten[1]) 
-	{
+    {
       SwitchFiles(readings[i].date, readings[i].time);
       lastHourWritten[0] = readings[i].time[0];
       lastHourWritten[1] = readings[i].time[1];
@@ -124,8 +107,10 @@ void LogPositions(int readingCount)
   taskStatusLed.ShowFileWritten();
 }
 
-bool SwitchFiles(char* date, char* time) 
+bool SwitchFiles(const char* date, const char* time) 
 {
+  char fileName[] = "000000-0.CSV";
+
 #ifdef SERIAL_DEBUG
   Serial.println(F("Changing files..."));
 #endif
@@ -135,7 +120,7 @@ bool SwitchFiles(char* date, char* time)
     logFile.close();
   }
 
-  SetFileName(date, time);
+  EncodeFileName(fileName, date, time);
 
 #ifdef SERIAL_DEBUG
   Serial.print(F("File name: "));
@@ -158,15 +143,15 @@ bool SwitchFiles(char* date, char* time)
   return true;
 }
 
-void SetFileName(char* date, char* time) 
+void EncodeFileName(char* fileName, const char* date, const char* time) 
 {
-  fileName[0] = readings[0].date[4];
-  fileName[1] = readings[0].date[5];
-  fileName[2] = readings[0].date[2];
-  fileName[3] = readings[0].date[3];
-  fileName[4] = readings[0].date[0];
-  fileName[5] = readings[0].date[1];
-  fileName[7] = ((readings[0].time[0] - '0') * 10 + readings[0].time[1] - '0') + 'A';
+  fileName[0] = date[4];
+  fileName[1] = date[5];
+  fileName[2] = date[2];
+  fileName[3] = date[3];
+  fileName[4] = date[0];
+  fileName[5] = date[1];
+  fileName[7] = ((time[0] - '0') * 10 + time[1] - '0') + 'A';
 }
 
 
