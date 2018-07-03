@@ -3,7 +3,7 @@
 
 #define NMEA_MESSAGE_BUFFER_SIZE 13
 #define NMEA_MESSAGE_READ_PIN 8
-#define NMEA_MESSAGW_WRITE_PIN 12
+#define NMEA_MESSAGE_WRITE_PIN 12
 
 enum NMEA_SENTENCE
 {
@@ -40,7 +40,7 @@ public:
         bufferIndex(0),
         segment(-1),
         sentence(NMEA_Unknown),
-        gps(NMEA_MESSAGE_READ_PIN, NMEA_MESSAGW_WRITE_PIN)
+        gps(NMEA_MESSAGE_READ_PIN, NMEA_MESSAGE_WRITE_PIN)
     { 
     };
 
