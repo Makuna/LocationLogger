@@ -11,10 +11,8 @@
 
 #define LOGGING_SWITCH_PIN 9
 
-#define SD_CHIP_SELECT 4
 #define SD_CHIP_SELECT D8
 
-// #define SERIAL_DEBUG
 #define SERIAL_DEBUG
 
 
