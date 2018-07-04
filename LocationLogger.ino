@@ -12,8 +12,10 @@
 #define LOGGING_SWITCH_PIN 9
 
 #define SD_CHIP_SELECT 4
+#define SD_CHIP_SELECT D8
 
 // #define SERIAL_DEBUG
+#define SERIAL_DEBUG
 
 
 // foreward delcare functions passed to task constructors
@@ -34,7 +36,7 @@ void setup() {
   taskStatusLed.ShowPowerUp();
 
 #ifdef SERIAL_DEBUG
-  Serial.begin(9600);
+  Serial.begin(115200);
   while (!Serial) {
   }
 
@@ -43,7 +45,8 @@ void setup() {
 
   pinMode(LOGGING_SWITCH_PIN, INPUT); // ??
 
-  sd.begin(SD_CHIP_SELECT, SPI_HALF_SPEED);
+  while (!sd.begin(SD_CHIP_SELECT, SPI_HALF_SPEED)) {
+  };
 
 #ifdef SERIAL_DEBUG
   Serial.println(F("SD started."));
@@ -66,6 +69,11 @@ void OnGpsReadingComplete(const GpsReading* readings, uint8_t readingCount)
 #ifdef SERIAL_DEBUG
   Serial.println(F("Writing readings..."));
 #endif
+
+  if (digitalRead(LOGGING_SWITCH_PIN) == LOW)
+  {
+    taskStatusLed.ShowGpsFixNoRecord();
+  }
 
   char lastHourWritten[2];
   lastHourWritten[0] = 'x';

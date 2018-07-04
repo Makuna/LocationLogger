@@ -50,6 +50,12 @@ public:
         flashColor = blue;
     }
 
+    void ShowGpsFixNoRecord()
+    {
+        flashState = 2; // single flash
+        flashColor = green;
+    }
+    
 private:
     // put member variables here that are scoped to this object
     NeoPixelBus<NeoGrbwFeature, Neo800KbpsMethod> strip;

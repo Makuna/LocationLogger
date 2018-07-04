@@ -4,8 +4,8 @@
 #define READINGS_SIZE 10
 
 #define NMEA_MESSAGE_BUFFER_SIZE 13
-#define NMEA_MESSAGE_READ_PIN 8
-#define NMEA_MESSAGE_WRITE_PIN 12
+#define NMEA_MESSAGE_READ_PIN D4
+#define NMEA_MESSAGE_WRITE_PIN D5
 
 enum NMEA_SENTENCE
 {
@@ -16,6 +16,10 @@ enum NMEA_SENTENCE
     NMEA_GPGSA,
     NMEA_GPGSV,
     NMEA_GPGLL,
+    NMEA_GNGLL,
+    NMEA_BDGSA,
+    NMEA_BDGSV,
+    NMEA_GNRMC
 };
 
 
@@ -137,12 +141,25 @@ private:
 
     bool IdentifiedSentence()
     {
-        if (segmentBuffer[0] == 'G' && segmentBuffer[1] == 'P')
+        #ifdef SERIAL_DEBUG
+            Serial.print("Sentence start: ");
+            for (int index = 0; index < 5; index++)
+            {
+                Serial.print(segmentBuffer[index]);
+            }
+            Serial.println();
+        #endif
+
+        if (segmentBuffer[0] == 'G' && (segmentBuffer[1] == 'P' || segmentBuffer[1] == 'N'))
         {
             if (segmentBuffer[2] == 'R')
             {
                 // $GPRMC: Time, date, position, course and speed data
                 sentence = NMEA_GPRMC;
+                #ifdef SERIAL_DEBUG
+                    Serial.println("Interpreting NMEA_GPRMC");
+                #endif
+
                 return true;  // start of a new reading, for now we trigger on this
 // $REVIEW - need to trigger after the last sentence we require has been fully read
             }
@@ -152,6 +169,9 @@ private:
                 {
                     // $GPGGA: Time, position, and fix related data of the receiver.
                     sentence = NMEA_GPGGA;
+                    #ifdef SERIAL_DEBUG
+                        Serial.println("Interpreting NMEA_GPGGA");
+                    #endif
                 }
                 else if (segmentBuffer[3] == 'S')
                 {
@@ -159,79 +179,111 @@ private:
                     {
                         // $GPGSA: ID�s of satellites which are used for position fix.
                         sentence = NMEA_GPGSA;
+                        #ifdef SERIAL_DEBUG
+                            Serial.println("Interpreting NMEA_GPGSA");
+                        #endif
                     }
                     else if (segmentBuffer[4] == 'V')
                     {
                         // $GPGSV: Satellite information about elevation, azimuth and CNR.
                         sentence = NMEA_GPGSV;
+                        #ifdef SERIAL_DEBUG
+                            Serial.println("Interpreting NMEA_GPGSV");
+                        #endif
                     }
                 }
                 else if (segmentBuffer[3] == 'L')
                 {
                     // $GPGLL: Position, time and fix status.
                     sentence = NMEA_GPGLL;
+                    #ifdef SERIAL_DEBUG
+                        Serial.println("Interpreting NMEA_GPGLL");
+                    #endif
                 }
             }
             else if (segmentBuffer[2] == 'V')
             {
                 // $GPVTG: Course and speed relative to the ground.
                 sentence = NMEA_GPVTG;
+                #ifdef SERIAL_DEBUG
+                    Serial.println("Interpreting NMEA_GPVTG");
+                #endif
             }
         }
+
         return false;
     }
 
     void ProcessSegmentBuffer()
     {
-        //Serial.println(segmentBuffer);
+        #ifdef SERIAL_DEBUG
+            Serial.print("Sentence ");
+            Serial.print(sentence);
+            Serial.print(" segment ");
+            Serial.print(segment);
+            Serial.print(": ");
+            Serial.println(segmentBuffer);
+        #endif
 
         switch (sentence) 
         {
-        case NMEA_GPRMC: 
-            // $GPRMC,074318.00,A,4735.41382,N,12212.35088,W,0.030,,170617,,,A*63
-            //        ^^^^^^^^^   ^^^^^^^^^^ ^ ^^^^^^^^^^^ ^        ^^^^^^
-            //        time        latitude   d longitude   d        date
-            switch (segment) 
-            {
-            case 1: // time
-                strcpy(readings[activeReadingIndex].time, segmentBuffer);
-                // Serial.print("Time = ");
-                // Serial.println(segmentBuffer);
-                break;
-            case 2: // fix quality
-                break;
-            case 3: // latitude
-                strcpy(readings[activeReadingIndex].latitude, segmentBuffer);
-                // Serial.print("Latitude = ");
-                // Serial.println(segmentBuffer);
-                break;
-            case 4: // latitude direction
-                strcpy(readings[activeReadingIndex].latitudeDirection, segmentBuffer);
-                // Serial.print("Latitude direction = ");
-                // Serial.println(segmentBuffer);
-                break;
-            case 5: // longitude
-                strcpy(readings[activeReadingIndex].longitude, segmentBuffer);
-                // Serial.print("Longitude = ");
-                // Serial.println(segmentBuffer);
-                break;
-            case 6: // longitude direction
-                strcpy(readings[activeReadingIndex].longitudeDirection, segmentBuffer);
-                // Serial.print("Longitude direction = ");
-                // Serial.println(segmentBuffer);
-                break;
-            case 7: // ?
-            case 8: // ?
-                break;
-            case 9: // date
-                strcpy(readings[activeReadingIndex].date, segmentBuffer);
-                // Serial.print("Date = ");
-                // Serial.println(segmentBuffer);
-                break;
+            case NMEA_GPRMC: 
+                // $GPRMC,074318.00,A,4735.41382,N,12212.35088,W,0.030,,170617,,,A*63
+                //        ^^^^^^^^^   ^^^^^^^^^^ ^ ^^^^^^^^^^^ ^        ^^^^^^
+                //        time        latitude   d longitude   d        date
+                switch (segment) 
+                {
+                    case 1: // time
+                        strcpy(readings[activeReadingIndex].time, segmentBuffer);
+                        #ifdef SERIAL_DEBUG
+                            Serial.print("Time = ");
+                            Serial.println(segmentBuffer);
+                        #endif
+                        break;
+                    case 2: // fix quality
+                        break;
+                    case 3: // latitude
+                        strcpy(readings[activeReadingIndex].latitude, segmentBuffer);
+                        #ifdef SERIAL_DEBUG
+                            Serial.print("Latitude = ");
+                            Serial.println(segmentBuffer);
+                        #endif
+                        break;
+                    case 4: // latitude direction
+                        strcpy(readings[activeReadingIndex].latitudeDirection, segmentBuffer);
+                        #ifdef SERIAL_DEBUG
+                            Serial.print("Latitude direction = ");
+                            Serial.println(segmentBuffer);
+                        #endif
+                        break;
+                    case 5: // longitude
+                        strcpy(readings[activeReadingIndex].longitude, segmentBuffer);
+                        #ifdef SERIAL_DEBUG
+                            Serial.print("Longitude = ");
+                            Serial.println(segmentBuffer);
+                        #endif
+                        break;
+                    case 6: // longitude direction
+                        strcpy(readings[activeReadingIndex].longitudeDirection, segmentBuffer);
+                        #ifdef SERIAL_DEBUG
+                            Serial.print("Longitude direction = ");
+                            Serial.println(segmentBuffer);
+                        #endif
+                        break;
+                    case 7: // ?
+                    case 8: // ?
+                        break;
+                    case 9: // date
+                        strcpy(readings[activeReadingIndex].date, segmentBuffer);
+                        #ifdef SERIAL_DEBUG
+                            Serial.print("Date = ");
+                            Serial.println(segmentBuffer);
+                        #endif
+                        break;
 
-            default:
-                break;
-            }
+                    default:
+                        break;
+                }
 
             break;
 
