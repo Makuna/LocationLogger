@@ -1,13 +1,10 @@
 
-
-
 #include <SdFat.h>
 #include <Task.h>
 
 #include "TaskStatusLed.h"  
 #include "TaskGps.h"
-
-
+#include "TaskButton.h"
 
 #define LOGGING_SWITCH_PIN 9
 
@@ -15,50 +12,60 @@
 
 // #define SERIAL_DEBUG
 
-
 // foreward delcare functions passed to task constructors
 void OnGpsReadingComplete(const GpsReading* readings, uint8_t count); 
+void HandleLogSwitchButtonChanged(ButtonState state);
 
 TaskManager taskManager;
 
 TaskStatusLed taskStatusLed;
 TaskGps taskGps(OnGpsReadingComplete);
-
+TaskButton AButtonTask(HandleLogSwitchButtonChanged, LOGGING_SWITCH_PIN); 
 
 SdFat sd;
 SdFile logFile;
 
-void setup() {
+void setup() 
+{
   taskManager.StartTask(&taskStatusLed);
   
   taskStatusLed.ShowPowerUp();
 
 #ifdef SERIAL_DEBUG
   Serial.begin(9600);
-  while (!Serial) {
-  }
+  while (!Serial) { }
 
   Serial.println(F("Starting..."));
 #endif
-
-  pinMode(LOGGING_SWITCH_PIN, INPUT); // ??
 
   sd.begin(SD_CHIP_SELECT, SPI_HALF_SPEED);
 
 #ifdef SERIAL_DEBUG
   Serial.println(F("SD started."));
 #endif
-  
-  taskManager.StartTask(&taskGps);
 
-#ifdef SERIAL_DEBUG
-  Serial.println(F("Serial port to GPS started."));
-#endif
+  taskManager.StartTask(&AButtonTask);
 }
 
 void loop() 
 {
   taskManager.Loop();
+}
+
+void HandleLogSwitchButtonChanged(ButtonState state)
+{
+    // on release only
+    if (state == ButtonState_Released)
+    {
+        if (taskManager.StatusTask(&taskGps) == TaskState_Stopped)
+        {
+            taskManager.StartTask(&taskGps);
+        }
+        else if (taskManager.StatusTask(&taskGps) == TaskState_Running)
+        {
+            taskManager.StopTask(&taskGps);
+        }
+    }
 }
 
 void OnGpsReadingComplete(const GpsReading* readings, uint8_t readingCount)
