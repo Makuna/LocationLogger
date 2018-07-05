@@ -2,57 +2,45 @@
 #include <SdFat.h>
 #include <Task.h>
 
-#include "TaskStatusLed.h"  
+#include "TaskStatusLed.h"
 #include "TaskGps.h"
 #include "TaskButton.h"
 
-#define LOGGING_SWITCH_PIN 9
+#define SAFE_EJECT_BUTTON_PIN 9
 
-#define SD_CHIP_SELECT D8
+#define SD_CHIP_SELECT 8 // D8
 
 #define SERIAL_DEBUG
 
-// foreward delcare functions passed to task constructors
-void OnGpsReadingComplete(const GpsReading* readings, uint8_t count); 
-void HandleLogSwitchButtonChanged(ButtonState state);
+// foreward declare functions passed to task constructors
+void OnGpsReadingComplete(const GpsReading *readings, uint8_t count);
+void OnGpsFixChanged(GPSFIXTYPE gpsFixType);
+void HandleSafeEjectButtonChange(ButtonState state);
 
 TaskManager taskManager;
 
 TaskStatusLed taskStatusLed;
-TaskGps taskGps(OnGpsReadingComplete);
-TaskButton AButtonTask(HandleLogSwitchButtonChanged, LOGGING_SWITCH_PIN); 
+TaskGps taskGps(OnGpsReadingComplete, OnGpsFixChanged);
+TaskButton AButtonTask(HandleSafeEjectButtonChange, SAFE_EJECT_BUTTON_PIN);
 
 SdFat sd;
 SdFile logFile;
 
-void setup() {
-void setup() 
+void setup()
 {
   taskManager.StartTask(&taskStatusLed);
-  
+
   taskStatusLed.ShowPowerUp();
 
 #ifdef SERIAL_DEBUG
-<<<<<<< HEAD
   Serial.begin(115200);
-  while (!Serial) {
-  }
-=======
-  Serial.begin(9600);
-  while (!Serial) { }
->>>>>>> master
-
+  while (!Serial) {}
   Serial.println(F("Starting..."));
 #endif
 
-<<<<<<< HEAD
-  pinMode(LOGGING_SWITCH_PIN, INPUT); // ??
+  pinMode(SAFE_EJECT_BUTTON_PIN, INPUT); // ??
 
-  while (!sd.begin(SD_CHIP_SELECT, SPI_HALF_SPEED)) {
-  };
-=======
-  sd.begin(SD_CHIP_SELECT, SPI_HALF_SPEED);
->>>>>>> master
+  while (!sd.begin(SD_CHIP_SELECT, SPI_HALF_SPEED)) {};
 
 #ifdef SERIAL_DEBUG
   Serial.println(F("SD started."));
@@ -61,45 +49,59 @@ void setup()
   taskManager.StartTask(&AButtonTask);
 }
 
-void loop() 
+void loop()
 {
   taskManager.Loop();
 }
 
-void HandleLogSwitchButtonChanged(ButtonState state)
+void HandleSafeEjectButtonChange(ButtonState state)
 {
-    // on release only
-    if (state == ButtonState_Released)
+  // on release only
+  if (state == ButtonState_Released)
+  {
+    if (taskManager.StatusTask(&taskGps) == TaskState_Stopped)
     {
-        if (taskManager.StatusTask(&taskGps) == TaskState_Stopped)
-        {
-            taskManager.StartTask(&taskGps);
-        }
-        else if (taskManager.StatusTask(&taskGps) == TaskState_Running)
-        {
-            taskManager.StopTask(&taskGps);
-        }
+      taskManager.StartTask(&taskGps);
     }
+    else if (taskManager.StatusTask(&taskGps) == TaskState_Running)
+    {
+      taskManager.StopTask(&taskGps);
+    }
+  }
 }
 
-void OnGpsReadingComplete(const GpsReading* readings, uint8_t readingCount)
+void OnGpsFixChanged(GPSFIXTYPE gpsFixType)
+{
+  switch (gpsFixType)
+  {
+    case GPSFIXTYPE_NOFIX:
+      taskStatusLed.ShowNoFix();
+      break;
+    case GPSFIXTYPE_2DFIX:
+    case GPSFIXTYPE_3DFIX:
+      taskStatusLed.Stop();
+      break;
+  }
+}
+
+void OnGpsReadingComplete(const GpsReading *readings, uint8_t readingCount)
 {
 #ifdef SERIAL_DEBUG
   Serial.println(F("Writing readings..."));
 #endif
 
-  if (digitalRead(LOGGING_SWITCH_PIN) == LOW)
+  if (digitalRead(SAFE_EJECT_BUTTON_PIN) == LOW)
   {
-    taskStatusLed.ShowGpsFixNoRecord();
+    taskStatusLed.ShowSafeToEject();
   }
 
   char lastHourWritten[2];
   lastHourWritten[0] = 'x';
   lastHourWritten[1] = 'x';
 
-  for (int i = 0; i < readingCount; i++) 
+  for (int i = 0; i < readingCount; i++)
   {
-    if (readings[i].time[0] != lastHourWritten[0] || readings[i].time[1] != lastHourWritten[1]) 
+    if (readings[i].time[0] != lastHourWritten[0] || readings[i].time[1] != lastHourWritten[1])
     {
       SwitchFiles(readings[i].date, readings[i].time);
       lastHourWritten[0] = readings[i].time[0];
@@ -130,10 +132,17 @@ void OnGpsReadingComplete(const GpsReading* readings, uint8_t readingCount)
 
   logFile.close();
 
-  taskStatusLed.ShowFileWritten();
+  if (taskManager.StatusTask(&taskGps) != TaskState_Running)
+  {
+    taskStatusLed.ShowSafeToEject();
+  }
+  else
+  {
+    taskStatusLed.ShowFileWritten();
+  }
 }
 
-bool SwitchFiles(const char* date, const char* time) 
+bool SwitchFiles(const char *date, const char *time)
 {
   char fileName[] = "000000-0.CSV";
 
@@ -141,7 +150,7 @@ bool SwitchFiles(const char* date, const char* time)
   Serial.println(F("Changing files..."));
 #endif
 
-  if (logFile.isOpen()) 
+  if (logFile.isOpen())
   {
     logFile.close();
   }
@@ -153,7 +162,7 @@ bool SwitchFiles(const char* date, const char* time)
   Serial.println(fileName);
 #endif
 
-  if (!logFile.open(fileName, O_WRITE | O_CREAT | O_AT_END)) 
+  if (!logFile.open(fileName, O_WRITE | O_CREAT | O_AT_END))
   {
     // blink red three times to indicate SD problem
 
@@ -169,7 +178,7 @@ bool SwitchFiles(const char* date, const char* time)
   return true;
 }
 
-void EncodeFileName(char* fileName, const char* date, const char* time) 
+void EncodeFileName(char *fileName, const char *date, const char *time)
 {
   fileName[0] = date[4];
   fileName[1] = date[5];
@@ -179,7 +188,3 @@ void EncodeFileName(char* fileName, const char* date, const char* time)
   fileName[5] = date[1];
   fileName[7] = ((time[0] - '0') * 10 + time[1] - '0') + 'A';
 }
-
-
-
-

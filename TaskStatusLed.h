@@ -3,7 +3,7 @@
 
 #define NEOPIXEL_COUNT 1
 #define NEOPIXEL_PIN 11
-#define NEOPIXEL_BLINK_MS 5
+#define NEOPIXEL_BLINK_MS 20
 
 #define COLOR_SATURATION 128
 
@@ -25,42 +25,70 @@ public:
 
     void ShowPowerUp()
     {
-        // we want emediate color change as 
+        // we want immediate color change as 
         // other initialization could extend how long this stays on
-        flashState = 1;
+        pattern = 0b0;
+        repeat = false;
+        patternIndex = 15;
         strip.SetPixelColor(0, white);
         strip.Show();
     }
 
     void ShowFileWritten()
     {
-        flashState = 2; // single flash
+        pattern = 0b1000000000000000; // single flash
+        repeat = false;
+        patternIndex = 15;
         flashColor = red;
     }
 
     void ShowFileOpenError()
     {
-        flashState = 6; // three flashes
+        pattern = 0b101010000000000; // three flashes
+        repeat = false;
+        patternIndex = 15;
         flashColor = red;
     }
 
     void ShowNoGpsFix()
     {
-        flashState = 2; // single flash
+        pattern = 0b1000000000000000; // single flash
+        repeat = false;
+        patternIndex = 15;
         flashColor = blue;
     }
 
-    void ShowGpsFixNoRecord()
+    void ShowSafeToEject()
     {
-        flashState = 2; // single flash
+        pattern = 0b101010000000000; // three flash
+        repeat = false;
+        patternIndex = 15;
         flashColor = green;
     }
-    
+
+    void ShowNoFix()
+    {
+        pattern = 0b1000000000000000; // three flash
+        repeat = true;
+        patternIndex = 15;
+        flashColor = blue;
+    }
+
+    void Stop()
+    {
+        pattern = 0b0;
+        repeat = false;
+        patternIndex = 0;
+        flashColor = black;
+    }
+
 private:
     // put member variables here that are scoped to this object
     NeoPixelBus<NeoGrbwFeature, Neo800KbpsMethod> strip;
     RgbColor flashColor;
-    uint8_t flashState;
+    int8_t patternIndex;
+    uint16_t pattern;
+    bool repeat;
 
     virtual bool OnStart() // optional
     {
@@ -68,27 +96,36 @@ private:
         strip.Begin();
         strip.Show();
 
+        pattern = 0;
+        patternIndex = -1;
+        repeat = false;
+
         return true;
     }
 
     virtual void OnUpdate(uint32_t deltaTime)
     {
-        // if there are any flashing going on, manage it
-        if (flashState)
+        if (patternIndex >= 0)
         {
-            flashState--;
-            if ((flashState % 2) == 0)
+            uint16_t remainingPattern = (pattern >> patternIndex);
+
+            if (repeat == false && remainingPattern == 0)
             {
-                // flash off
-                strip.SetPixelColor(0, black);
+                patternIndex = -1;
+                return;
             }
-            else
-            {
-                // flash on
-                strip.SetPixelColor(0, flashColor);
-            }
-            
+
+            bool indexState = remainingPattern & 0b1;
+
+            strip.SetPixelColor(0, indexState ? flashColor : black);
             strip.Show();
+            
+            patternIndex--;
+
+            if (repeat && patternIndex == -1)
+            {
+                patternIndex = 15;
+            }
         }
     }
 };

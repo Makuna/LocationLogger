@@ -4,29 +4,40 @@
 #define READINGS_SIZE 10
 
 #define NMEA_MESSAGE_BUFFER_SIZE 13
-#define NMEA_MESSAGE_READ_PIN D4
-#define NMEA_MESSAGE_WRITE_PIN D5
+#define NMEA_MESSAGE_READ_PIN 9 // D4
+#define NMEA_MESSAGE_WRITE_PIN 10 // D5
+
+enum GPSFIXTYPE
+{
+    GPSFIXTYPE_NOFIX = 1,
+    GPSFIXTYPE_2DFIX,
+    GPSFIXTYPE_3DFIX
+};
 
 enum NMEA_SENTENCE
 {
-    NMEA_Unknown = -1,
-    NMEA_GPRMC,
-    NMEA_GPVTG,
-    NMEA_GPGGA,
-    NMEA_GPGSA,
-    NMEA_GPGSV,
-    NMEA_GPGLL,
-    NMEA_GNGLL,
-    NMEA_BDGSA,
-    NMEA_BDGSV,
-    NMEA_GNRMC
+    NMEA_SENTENCE_Unknown = -1,
+    NMEA_SENTENCE_GPRMC,
+    NMEA_SENTENCE_GPVTG,
+    NMEA_SENTENCE_GPGGA,
+    NMEA_SENTENCE_GPGSA,
+    NMEA_SENTENCE_GPGSV,
+    NMEA_SENTENCE_GPGLL,
+    NMEA_SENTENCE_GNGLL,
+    NMEA_SENTENCE_BDGSA,
+    NMEA_SENTENCE_BDGSV,
+    NMEA_SENTENCE_GNRMC,
+    NMEA_SENTENCE_GNGGA,
+    NMEA_SENTENCE_GNVTG,
+    NMEA_SENTENCE_GNGSV,
+    NMEA_SENTENCE_GNGSA
 };
 
 
 struct GpsReading 
 {
     char date[7];
-    char time[10];
+    char time[11];
     char latitude[16];
     char latitudeDirection[2];
     char longitude[17];
@@ -36,26 +47,32 @@ struct GpsReading
 };
 
 typedef void(*GpsReadingComplete)(const GpsReading* readings, uint8_t count);
+typedef void(*GpsFixChanged)(GPSFIXTYPE gpsFixType);
 
 class TaskGps : public Task
 {
 public:
-    TaskGps(GpsReadingComplete function) : // pass any custom arguments you need
+    TaskGps(GpsReadingComplete gpsReadingCompleteFunction, GpsFixChanged gpsFixChangedCallbackFunction) : // pass any custom arguments you need
         Task(10), // check every 10 ms
-        callback(function),
+        gpsReadingCompleteCallback(gpsReadingCompleteFunction),
+        gpsFixChangedCallback(gpsFixChangedCallbackFunction),
         activeReadingIndex(0),
         bufferIndex(0),
         segment(-1),
-        sentence(NMEA_Unknown),
+        sentence(NMEA_SENTENCE_Unknown),
+        gpsFixType(GPSFIXTYPE_NOFIX),
         gps(NMEA_MESSAGE_READ_PIN, NMEA_MESSAGE_WRITE_PIN)
     { 
+        memset(readings, 0, sizeof(readings));
     };
 
 
 
 private:
     // put member variables here that are scoped to this object
-    GpsReadingComplete callback;
+    GpsReadingComplete gpsReadingCompleteCallback;
+    GpsFixChanged gpsFixChangedCallback;
+
     SoftwareSerial gps;
    
     GpsReading readings[READINGS_SIZE];
@@ -65,6 +82,7 @@ private:
     int8_t bufferIndex;
     int8_t segment;
     NMEA_SENTENCE sentence;
+    GPSFIXTYPE gpsFixType;
 
     virtual bool OnStart() // optional
     {
@@ -75,7 +93,8 @@ private:
         activeReadingIndex = 0;
         bufferIndex = 0;
         segment = -1;
-        sentence = NMEA_Unknown;
+        sentence = NMEA_SENTENCE_Unknown;
+        gpsFixType = GPSFIXTYPE_NOFIX;
 
         return true;
     }
@@ -88,8 +107,8 @@ private:
         // if we have any readings when asked to stop
         if (activeReadingIndex)
         {
-            // inform callback on number of readings we have
-            callback(readings, activeReadingIndex);
+            // inform gpsReadingCompleteCallback on number of readings we have
+            gpsReadingCompleteCallback(readings, activeReadingIndex);
         }
     }
 
@@ -99,7 +118,7 @@ private:
         {
             char lastChar = gps.read();
 
-            if (lastChar == ',') 
+            if (lastChar == ',' || lastChar == '*') 
             {
                 // end of segment
                 if (segment == 0)
@@ -110,7 +129,7 @@ private:
                         if (activeReadingIndex == READINGS_SIZE)
                         {
                             activeReadingIndex = 0;
-                            callback(readings, READINGS_SIZE);
+                            gpsReadingCompleteCallback(readings, READINGS_SIZE);
                         }
                     }
                 }
@@ -126,7 +145,7 @@ private:
             else if (lastChar == '$') 
             {
                 // start of a new sentence
-                sentence = NMEA_Unknown;
+                sentence = NMEA_SENTENCE_Unknown;
                 segment = 0;
                 bufferIndex = 0;
             }
@@ -142,7 +161,7 @@ private:
     bool IdentifiedSentence()
     {
         #ifdef SERIAL_DEBUG
-            Serial.print("Sentence start: ");
+            Serial.print(F("Sentence start: "));
             for (int index = 0; index < 5; index++)
             {
                 Serial.print(segmentBuffer[index]);
@@ -150,64 +169,136 @@ private:
             Serial.println();
         #endif
 
-        if (segmentBuffer[0] == 'G' && (segmentBuffer[1] == 'P' || segmentBuffer[1] == 'N'))
+        if (segmentBuffer[0] == 'B')
         {
-            if (segmentBuffer[2] == 'R')
+            // BD sentence
+            if (segmentBuffer[1] == 'N')
             {
-                // $GPRMC: Time, date, position, course and speed data
-                sentence = NMEA_GPRMC;
-                #ifdef SERIAL_DEBUG
-                    Serial.println("Interpreting NMEA_GPRMC");
-                #endif
 
-                return true;  // start of a new reading, for now we trigger on this
-// $REVIEW - need to trigger after the last sentence we require has been fully read
             }
-            else if (segmentBuffer[2] == 'G')
+        }
+        else if (segmentBuffer[0] == 'G')
+        {
+            // GPS sentence
+            if (segmentBuffer[1] == 'P')
             {
-                if (segmentBuffer[3] == 'G')
+                if (segmentBuffer[2] == 'R')
                 {
-                    // $GPGGA: Time, position, and fix related data of the receiver.
-                    sentence = NMEA_GPGGA;
+                    // $GPRMC: Time, date, position, course and speed data
+                    sentence = NMEA_SENTENCE_GPRMC;
                     #ifdef SERIAL_DEBUG
-                        Serial.println("Interpreting NMEA_GPGGA");
+                        Serial.println("Interpreting NMEA_SENTENCE_GPRMC");
                     #endif
+
+                    return true;  // start of a new reading, for now we trigger on this
+                    // $REVIEW - need to trigger after the last sentence we require has been fully read
                 }
-                else if (segmentBuffer[3] == 'S')
+                else if (segmentBuffer[2] == 'G')
                 {
-                    if (segmentBuffer[4] == 'A')
+                    if (segmentBuffer[3] == 'G')
                     {
-                        // $GPGSA: ID�s of satellites which are used for position fix.
-                        sentence = NMEA_GPGSA;
+                        // $GPGGA: Time, position, and fix related data of the receiver.
+                        sentence = NMEA_SENTENCE_GPGGA;
                         #ifdef SERIAL_DEBUG
-                            Serial.println("Interpreting NMEA_GPGSA");
+                            Serial.println("Interpreting NMEAIAL_DEBUG_GPGGA");
                         #endif
                     }
-                    else if (segmentBuffer[4] == 'V')
+                    else if (segmentBuffer[3] == 'S')
                     {
-                        // $GPGSV: Satellite information about elevation, azimuth and CNR.
-                        sentence = NMEA_GPGSV;
+                        if (segmentBuffer[4] == 'A')
+                        {
+                            // $GPGSA: IDs of satellites which are used for position fix.
+                            sentence = NMEA_SENTENCE_GPGSA;
+                            #ifdef SERIAL_DEBUG
+                                Serial.println("Interpreting NMEA_SENTENCE_GPGSA");
+                            #endif
+                        }
+                        else if (segmentBuffer[4] == 'V')
+                        {
+                            // $GPGSV: Satellite information about elevation, azimuth and CNR.
+                            sentence = NMEA_SENTENCE_GPGSV;
+                            #ifdef SERIAL_DEBUG
+                                Serial.println("Interpreting NMEA_SENTENCE_GPGSV");
+                            #endif
+                        }
+                    }
+                    else if (segmentBuffer[3] == 'L')
+                    {
+                        // $GPGLL: Position, time and fix status.
+                        sentence = NMEA_SENTENCE_GPGLL;
                         #ifdef SERIAL_DEBUG
-                            Serial.println("Interpreting NMEA_GPGSV");
+                            Serial.println("Interpreting NMEA_SENTENCE_GPGLL");
                         #endif
                     }
                 }
-                else if (segmentBuffer[3] == 'L')
+                else if (segmentBuffer[2] == 'V')
                 {
-                    // $GPGLL: Position, time and fix status.
-                    sentence = NMEA_GPGLL;
+                    // $GPVTG: Course and speed relative to the ground.
+                    sentence = NMEA_SENTENCE_GPVTG;
                     #ifdef SERIAL_DEBUG
-                        Serial.println("Interpreting NMEA_GPGLL");
+                        Serial.println("Interpreting NMEAIAL_DEBUG_GPVTG");
                     #endif
                 }
             }
-            else if (segmentBuffer[2] == 'V')
+            else if (segmentBuffer[1] == 'N')
             {
-                // $GPVTG: Course and speed relative to the ground.
-                sentence = NMEA_GPVTG;
-                #ifdef SERIAL_DEBUG
-                    Serial.println("Interpreting NMEA_GPVTG");
-                #endif
+                if (segmentBuffer[2] == 'R')
+                {
+                    // $GPRMC: Time, date, position, course and speed data
+                    sentence = NMEA_SENTENCE_GNRMC;
+                    #ifdef SERIAL_DEBUG
+                        Serial.println("Interpreting NMEA_SENTENCE_SENTENCE_GPRMC");
+                    #endif
+
+                    return true;  // start of a new reading, for now we trigger on this
+                    // $REVIEW - need to trigger after the last sentence we require has been fully read
+                }
+                else if (segmentBuffer[2] == 'G')
+                {
+                    if (segmentBuffer[3] == 'G')
+                    {
+                        // $GPGGA: Time, position, and fix related data of the receiver.
+                        sentence = NMEA_SENTENCE_GNGGA;
+                        #ifdef SERIAL_DEBUG
+                            Serial.println(F("Interpreting NMEAIAL_DEBUG_GPGGA"));
+                        #endif
+                    }
+                    else if (segmentBuffer[3] == 'S')
+                    {
+                        if (segmentBuffer[4] == 'A')
+                        {
+                            // $GPGSA: IDs of satellites which are used for position fix.
+                            sentence = NMEA_SENTENCE_GNGSA;
+                            #ifdef SERIAL_DEBUG
+                                Serial.println(F("Interpreting NMEA_SENTENCE_GPGSA"));
+                            #endif
+                        }
+                        else if (segmentBuffer[4] == 'V')
+                        {
+                            // $GPGSV: Satellite information about elevation, azimuth and CNR.
+                            sentence = NMEA_SENTENCE_GNGSV;
+                            #ifdef SERIAL_DEBUG
+                                Serial.println(F("Interpreting NMEA_SENTENCE_GPGSV"));
+                            #endif
+                        }
+                    }
+                    else if (segmentBuffer[3] == 'L')
+                    {
+                        // $GPGLL: Position, time and fix status.
+                        sentence = NMEA_SENTENCE_GNGLL;
+                        #ifdef SERIAL_DEBUG
+                            Serial.println(F("Interpreting NMEA_SENTENCE_GPGLL"));
+                        #endif
+                    }
+                }
+                else if (segmentBuffer[2] == 'V')
+                {
+                    // $GPVTG: Course and speed relative to the ground.
+                    sentence = NMEA_SENTENCE_GNVTG;
+                    #ifdef SERIAL_DEBUG
+                        Serial.println(F("Interpreting NMEAIAL_DEBUG_GPVTG"));
+                    #endif
+                }
             }
         }
 
@@ -217,26 +308,27 @@ private:
     void ProcessSegmentBuffer()
     {
         #ifdef SERIAL_DEBUG
-            Serial.print("Sentence ");
+            Serial.print(F("Sentence "));
             Serial.print(sentence);
-            Serial.print(" segment ");
+            Serial.print(F(" segment "));
             Serial.print(segment);
-            Serial.print(": ");
+            Serial.print(F(": "));
             Serial.println(segmentBuffer);
         #endif
 
         switch (sentence) 
         {
-            case NMEA_GPRMC: 
-                // $GPRMC,074318.00,A,4735.41382,N,12212.35088,W,0.030,,170617,,,A*63
-                //        ^^^^^^^^^   ^^^^^^^^^^ ^ ^^^^^^^^^^^ ^        ^^^^^^
+            case NMEA_SENTENCE_GNRMC:
+            case NMEA_SENTENCE_GPRMC: 
+                // $GPRMC,074318.000,A,4735.41382,N,12212.35088,W,0.030,,170617,,,A*63
+                //        ^^^^^^^^^^   ^^^^^^^^^^ ^ ^^^^^^^^^^^ ^        ^^^^^^
                 //        time        latitude   d longitude   d        date
                 switch (segment) 
                 {
                     case 1: // time
-                        strcpy(readings[activeReadingIndex].time, segmentBuffer);
+                        strncpy(readings[activeReadingIndex].time, segmentBuffer, 6);
                         #ifdef SERIAL_DEBUG
-                            Serial.print("Time = ");
+                            Serial.print(F("Time = "));
                             Serial.println(segmentBuffer);
                         #endif
                         break;
@@ -245,28 +337,28 @@ private:
                     case 3: // latitude
                         strcpy(readings[activeReadingIndex].latitude, segmentBuffer);
                         #ifdef SERIAL_DEBUG
-                            Serial.print("Latitude = ");
+                            Serial.print(F("Latitude = "));
                             Serial.println(segmentBuffer);
                         #endif
                         break;
                     case 4: // latitude direction
                         strcpy(readings[activeReadingIndex].latitudeDirection, segmentBuffer);
                         #ifdef SERIAL_DEBUG
-                            Serial.print("Latitude direction = ");
+                            Serial.print(F("Latitude direction = "));
                             Serial.println(segmentBuffer);
                         #endif
                         break;
                     case 5: // longitude
                         strcpy(readings[activeReadingIndex].longitude, segmentBuffer);
                         #ifdef SERIAL_DEBUG
-                            Serial.print("Longitude = ");
+                            Serial.print(F("Longitude = "));
                             Serial.println(segmentBuffer);
                         #endif
                         break;
                     case 6: // longitude direction
                         strcpy(readings[activeReadingIndex].longitudeDirection, segmentBuffer);
                         #ifdef SERIAL_DEBUG
-                            Serial.print("Longitude direction = ");
+                            Serial.print(F("Longitude direction = "));
                             Serial.println(segmentBuffer);
                         #endif
                         break;
@@ -276,7 +368,7 @@ private:
                     case 9: // date
                         strcpy(readings[activeReadingIndex].date, segmentBuffer);
                         #ifdef SERIAL_DEBUG
-                            Serial.print("Date = ");
+                            Serial.print(F("Date = "));
                             Serial.println(segmentBuffer);
                         #endif
                         break;
@@ -287,41 +379,58 @@ private:
 
             break;
 
-        case NMEA_GPVTG: // $GPVTG
+        case NMEA_SENTENCE_GNVTG:
             break;
 
-        case NMEA_GPGGA: // $GPGGA
+        case NMEA_SENTENCE_GNGGA:
+        case NMEA_SENTENCE_GPGGA:
             switch (segment) 
             {
-            case 1: // time
-            case 5: // longitude direction
-            case 6: // ?
-                break;
-            case 7: // number of satellites
-                strcpy(readings[activeReadingIndex].satelliteCount, segmentBuffer);
-                // Serial.print("Satellites = ");
-                // Serial.println(segmentBuffer);
-                break;
-            case 8: // ?
-                break;
-            case 9: // altitude
-                strcpy(readings[activeReadingIndex].altitude, segmentBuffer);
-                // Serial.print("Altitude = ");
-                // Serial.println(segmentBuffer);
-                break;
-            case 10:// altitude unit
-            case 11: // ?
-            case 12: // ?
-                break;
+                case 1: // time
+                case 5: // longitude direction
+                case 6: // ?
+                    break;
+                case 7: // number of satellites
+                    strcpy(readings[activeReadingIndex].satelliteCount, segmentBuffer);
+                    // Serial.print("Satellites = ");
+                    // Serial.println(segmentBuffer);
+                    break;
+                case 8: // ?
+                    break;
+                case 9: // altitude
+                    strcpy(readings[activeReadingIndex].altitude, segmentBuffer);
+                    // Serial.print("Altitude = ");
+                    // Serial.println(segmentBuffer);
+                    break;
+                case 10:// altitude unit
+                case 11: // ?
+                case 12: // ?
+                    break;
 
-            default:
-                break;
+                default:
+                    break;
             }
             break;
 
-        case NMEA_GPGSA: // $GPGSA
-        case NMEA_GPGSV: // $GPGSV
-        case NMEA_GPGLL: // $GPGLL
+        case NMEA_SENTENCE_GPGSA:
+            switch (segment)
+            {
+                case 2: // Fix type
+                {
+                    GPSFIXTYPE newGpsFixType = static_cast<GPSFIXTYPE>(segmentBuffer[0] - '0');
+
+                    if (newGpsFixType != gpsFixType)
+                    {
+                        gpsFixChangedCallback(newGpsFixType);
+                        gpsFixType = newGpsFixType;
+                    }
+                    break;
+                }
+            }
+            break;
+
+        case NMEA_SENTENCE_GPGSV:
+        case NMEA_SENTENCE_GPGLL:
             break;
 
         default:
