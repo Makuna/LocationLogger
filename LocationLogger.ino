@@ -1,3 +1,4 @@
+#define SERIAL_DEBUG
 
 #include <SdFat.h>
 #include <Task.h>
@@ -6,11 +7,11 @@
 #include "TaskGps.h"
 #include "TaskButton.h"
 
-#define SAFE_EJECT_BUTTON_PIN 9
+#include "ESP8266WiFi.h"
 
-#define SD_CHIP_SELECT 8 // D8
+#define SAFE_EJECT_BUTTON_PIN D3
 
-#define SERIAL_DEBUG
+#define SD_CHIP_SELECT D8 // D8
 
 // foreward declare functions passed to task constructors
 void OnGpsReadingComplete(const GpsReading *readings, uint8_t count);
@@ -28,25 +29,38 @@ SdFile logFile;
 
 void setup()
 {
+  #ifdef SERIAL_DEBUG
+    Serial.begin(115200);
+    while (!Serial) {}
+    Serial.println(F("Starting..."));
+  #endif
+
+  #ifdef SERIAL_DEBUG
+    Serial.println(F("Turning off Wi-Fi..."));
+  #endif
+
+  WiFi.mode(WIFI_OFF);
+  WiFi.forceSleepBegin();
+  delay(1);
+
+  #ifdef SERIAL_DEBUG
+    Serial.println(F("Wi-Fi off."));
+  #endif
+
   taskManager.StartTask(&taskStatusLed);
 
   taskStatusLed.ShowPowerUp();
-
-#ifdef SERIAL_DEBUG
-  Serial.begin(115200);
-  while (!Serial) {}
-  Serial.println(F("Starting..."));
-#endif
 
   pinMode(SAFE_EJECT_BUTTON_PIN, INPUT); // ??
 
   while (!sd.begin(SD_CHIP_SELECT, SPI_HALF_SPEED)) {};
 
-#ifdef SERIAL_DEBUG
-  Serial.println(F("SD started."));
-#endif
+  #ifdef SERIAL_DEBUG
+    Serial.println(F("SD started."));
+  #endif
 
   taskManager.StartTask(&AButtonTask);
+  taskManager.StartTask(&taskGps);
 }
 
 void loop()
@@ -59,6 +73,10 @@ void HandleSafeEjectButtonChange(ButtonState state)
   // on release only
   if (state == ButtonState_Released)
   {
+    #ifdef SERIAL_DEBUG
+      Serial.println("Button released.");
+    #endif
+
     if (taskManager.StatusTask(&taskGps) == TaskState_Stopped)
     {
       taskManager.StartTask(&taskGps);

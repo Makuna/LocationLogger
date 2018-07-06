@@ -4,8 +4,8 @@
 #define READINGS_SIZE 10
 
 #define NMEA_MESSAGE_BUFFER_SIZE 13
-#define NMEA_MESSAGE_READ_PIN 9 // D4
-#define NMEA_MESSAGE_WRITE_PIN 10 // D5
+#define NMEA_MESSAGE_READ_PIN D4
+#define NMEA_MESSAGE_WRITE_PIN D3
 
 enum GPSFIXTYPE
 {
@@ -86,8 +86,15 @@ private:
 
     virtual bool OnStart() // optional
     {
-        // put code here that will be run when the task starts
+        #ifdef SERIAL_DEBUG
+            Serial.println("Starting GPS communications...");
+        #endif
+
         gps.begin(9600);
+
+        #ifdef SERIAL_DEBUG
+            Serial.println("GPS communications started.");
+        #endif
 
         // init state 
         activeReadingIndex = 0;
@@ -101,9 +108,16 @@ private:
 
     virtual void OnStop() // optional
     {
-        // put code here that will be run when the task stops
+        #ifdef SERIAL_DEBUG
+            Serial.println("Stopping GPS task...");
+        #endif
+
         gps.end();
 
+        #ifdef SERIAL_DEBUG
+            Serial.println("GPS task stopped.");
+        #endif
+        
         // if we have any readings when asked to stop
         if (activeReadingIndex)
         {
