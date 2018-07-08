@@ -2,8 +2,14 @@
 #include <NeoPixelBus.h>
 
 #define NEOPIXEL_COUNT 1
-#define NEOPIXEL_PIN 11
 #define NEOPIXEL_BLINK_MS 20
+
+#ifdef WEMOS_D1_MINI
+    #define NEOPIXEL_PIN D2
+#endif
+#ifdef ARDUINO_PRO_MINI
+    #define NEOPIXEL_PIN 8
+#endif
 
 #define COLOR_SATURATION 128
 
@@ -13,7 +19,6 @@ RgbColor green(0, COLOR_SATURATION, 0);
 RgbColor blue(0, 0, COLOR_SATURATION);
 RgbColor white(COLOR_SATURATION);
 RgbColor black(0);
-
 
 class TaskStatusLed : public Task
 {
@@ -36,7 +41,7 @@ public:
 
     void ShowFileWritten()
     {
-        pattern = 0b1000000000000000; // single flash
+        pattern = 0b1000000000000000;
         repeat = false;
         patternIndex = 15;
         flashColor = red;
@@ -44,34 +49,42 @@ public:
 
     void ShowFileOpenError()
     {
-        pattern = 0b101010000000000; // three flashes
+        pattern = 0b101010000000000;
         repeat = false;
         patternIndex = 15;
         flashColor = red;
     }
 
-    void ShowNoGpsFix()
-    {
-        pattern = 0b1000000000000000; // single flash
-        repeat = false;
-        patternIndex = 15;
-        flashColor = blue;
-    }
-
     void ShowSafeToEject()
     {
-        pattern = 0b101010000000000; // three flash
-        repeat = false;
+        pattern = 0b1000000000000000;
+        repeat = true;
         patternIndex = 15;
         flashColor = green;
     }
 
     void ShowNoFix()
     {
-        pattern = 0b1000000000000000; // three flash
+        pattern = 0b1010100000000000;
         repeat = true;
         patternIndex = 15;
         flashColor = blue;
+    }
+
+    void ShowFix()
+    {
+        pattern = 0b1000100010000000;
+        repeat = false;
+        patternIndex = 15;
+        flashColor = green;
+    }
+
+    void ShowStartRecording()
+    {
+        pattern = 0b100010001000000;
+        repeat = false;
+        patternIndex = 15;
+        flashColor = red;
     }
 
     void Stop()
@@ -107,19 +120,15 @@ private:
     {
         if (patternIndex >= 0)
         {
-            uint16_t remainingPattern = (pattern >> patternIndex);
-
-            if (repeat == false && remainingPattern == 0)
-            {
-                patternIndex = -1;
-                return;
-            }
-
-            bool indexState = remainingPattern & 0b1;
+		    bool indexState = ((pattern >> patternIndex) & 0b1) > 0;
 
             strip.SetPixelColor(0, indexState ? flashColor : black);
             strip.Show();
             
+            if (patternIndex > 0 && (pattern << (16 - patternIndex)) == 0) {
+                patternIndex = 1;
+            }
+		
             patternIndex--;
 
             if (repeat && patternIndex == -1)

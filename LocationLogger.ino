@@ -1,4 +1,6 @@
-#define SERIAL_DEBUG
+//#define SERIAL_DEBUG
+#define WEMOS_D1_MINI
+//#define ARDUINO_PRO_MINI
 
 #include <SdFat.h>
 #include <Task.h>
@@ -6,12 +8,21 @@
 #include "TaskStatusLed.h"
 #include "TaskGps.h"
 #include "TaskButton.h"
-
 #include "ESP8266WiFi.h"
 
-#define SAFE_EJECT_BUTTON_PIN D3
+#ifdef WEMOS_D1_MINI
+  #define SAFE_EJECT_BUTTON_PIN D3
+#endif
+#ifdef ARDUINO_PRO_MINI
+  #define SAFE_EJECT_BUTTON_PIN 9
+#endif
 
-#define SD_CHIP_SELECT D8 // D8
+#ifdef WEMOS_D1_MINI
+  #define SD_CHIP_SELECT D8 // D8
+#endif
+#ifdef ARDUINO_PRO_MINI
+  #define SD_CHIP_SELECT 10
+#endif
 
 // foreward declare functions passed to task constructors
 void OnGpsReadingComplete(const GpsReading *readings, uint8_t count);
@@ -51,14 +62,13 @@ void setup()
 
   taskStatusLed.ShowPowerUp();
 
-  pinMode(SAFE_EJECT_BUTTON_PIN, INPUT); // ??
-
   while (!sd.begin(SD_CHIP_SELECT, SPI_HALF_SPEED)) {};
 
   #ifdef SERIAL_DEBUG
     Serial.println(F("SD started."));
   #endif
 
+  taskStatusLed.Stop();
   taskManager.StartTask(&AButtonTask);
   taskManager.StartTask(&taskGps);
 }
@@ -80,16 +90,23 @@ void HandleSafeEjectButtonChange(ButtonState state)
     if (taskManager.StatusTask(&taskGps) == TaskState_Stopped)
     {
       taskManager.StartTask(&taskGps);
+      taskStatusLed.ShowStartRecording();
     }
     else if (taskManager.StatusTask(&taskGps) == TaskState_Running)
     {
       taskManager.StopTask(&taskGps);
+      taskStatusLed.ShowSafeToEject();
     }
   }
 }
 
 void OnGpsFixChanged(GPSFIXTYPE gpsFixType)
 {
+  #ifdef SERIAL_DEBUG
+    Serial.print("GPS fix changing to ");
+    Serial.println(gpsFixType);
+  #endif
+
   switch (gpsFixType)
   {
     case GPSFIXTYPE_NOFIX:
@@ -97,21 +114,16 @@ void OnGpsFixChanged(GPSFIXTYPE gpsFixType)
       break;
     case GPSFIXTYPE_2DFIX:
     case GPSFIXTYPE_3DFIX:
-      taskStatusLed.Stop();
+      taskStatusLed.ShowFix();
       break;
   }
 }
 
 void OnGpsReadingComplete(const GpsReading *readings, uint8_t readingCount)
 {
-#ifdef SERIAL_DEBUG
-  Serial.println(F("Writing readings..."));
-#endif
-
-  if (digitalRead(SAFE_EJECT_BUTTON_PIN) == LOW)
-  {
-    taskStatusLed.ShowSafeToEject();
-  }
+  #ifdef SERIAL_DEBUG
+    Serial.println(F("Writing readings..."));
+  #endif
 
   char lastHourWritten[2];
   lastHourWritten[0] = 'x';
@@ -126,10 +138,10 @@ void OnGpsReadingComplete(const GpsReading *readings, uint8_t readingCount)
       lastHourWritten[1] = readings[i].time[1];
     }
 
-#ifdef SERIAL_DEBUG
-    Serial.print(F("Writing reading "));
-    Serial.println(i);
-#endif
+    #ifdef SERIAL_DEBUG
+        Serial.print(F("Writing reading "));
+        Serial.println(i);
+    #endif
 
     logFile.print(readings[i].date);
     logFile.print(',');
@@ -153,6 +165,9 @@ void OnGpsReadingComplete(const GpsReading *readings, uint8_t readingCount)
   if (taskManager.StatusTask(&taskGps) != TaskState_Running)
   {
     taskStatusLed.ShowSafeToEject();
+    #ifdef SERIAL_DEBUG
+      Serial.println("Safe to eject.");
+    #endif
   }
   else
   {
@@ -164,9 +179,9 @@ bool SwitchFiles(const char *date, const char *time)
 {
   char fileName[] = "000000-0.CSV";
 
-#ifdef SERIAL_DEBUG
-  Serial.println(F("Changing files..."));
-#endif
+  #ifdef SERIAL_DEBUG
+    Serial.println(F("Changing files..."));
+  #endif
 
   if (logFile.isOpen())
   {
@@ -175,10 +190,10 @@ bool SwitchFiles(const char *date, const char *time)
 
   EncodeFileName(fileName, date, time);
 
-#ifdef SERIAL_DEBUG
-  Serial.print(F("File name: "));
-  Serial.println(fileName);
-#endif
+  #ifdef SERIAL_DEBUG
+    Serial.print(F("File name: "));
+    Serial.println(fileName);
+  #endif
 
   if (!logFile.open(fileName, O_WRITE | O_CREAT | O_AT_END))
   {
@@ -186,9 +201,9 @@ bool SwitchFiles(const char *date, const char *time)
 
     taskStatusLed.ShowFileOpenError();
 
-#ifdef SERIAL_DEBUG
-    Serial.println(F("Error opening file."));
-#endif
+    #ifdef SERIAL_DEBUG
+        Serial.println(F("Error opening file."));
+    #endif
 
     return false;
   }

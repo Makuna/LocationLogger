@@ -2,10 +2,16 @@
 #include <SoftwareSerial.h>
 
 #define READINGS_SIZE 10
-
 #define NMEA_MESSAGE_BUFFER_SIZE 13
-#define NMEA_MESSAGE_READ_PIN D4
-#define NMEA_MESSAGE_WRITE_PIN D3
+
+#ifdef WEMOS_D1_MINI
+    #define NMEA_MESSAGE_READ_PIN D4
+    #define NMEA_MESSAGE_WRITE_PIN D3
+#endif
+#ifdef ARDUINO_PRO_MINI
+    #define NMEA_MESSAGE_READ_PIN 5
+    #define NMEA_MESSAGE_WRITE_PIN 6
+#endif
 
 enum GPSFIXTYPE
 {
@@ -87,13 +93,13 @@ private:
     virtual bool OnStart() // optional
     {
         #ifdef SERIAL_DEBUG
-            Serial.println("Starting GPS communications...");
+            Serial.println("Starting GPS task...");
         #endif
 
         gps.begin(9600);
 
         #ifdef SERIAL_DEBUG
-            Serial.println("GPS communications started.");
+            Serial.println("GPS task started.");
         #endif
 
         // init state 
@@ -261,7 +267,7 @@ private:
                     // $GPRMC: Time, date, position, course and speed data
                     sentence = NMEA_SENTENCE_GNRMC;
                     #ifdef SERIAL_DEBUG
-                        Serial.println("Interpreting NMEA_SENTENCE_SENTENCE_GPRMC");
+                        Serial.println("Interpreting NMEA_SENTENCE_GPRMC");
                     #endif
 
                     return true;  // start of a new reading, for now we trigger on this
@@ -406,15 +412,19 @@ private:
                     break;
                 case 7: // number of satellites
                     strcpy(readings[activeReadingIndex].satelliteCount, segmentBuffer);
-                    // Serial.print("Satellites = ");
-                    // Serial.println(segmentBuffer);
+                    #ifdef SERIAL_DEBUG
+                        Serial.print("Satellites = ");
+                        Serial.println(segmentBuffer);
+                    #endif
                     break;
                 case 8: // ?
                     break;
                 case 9: // altitude
                     strcpy(readings[activeReadingIndex].altitude, segmentBuffer);
-                    // Serial.print("Altitude = ");
-                    // Serial.println(segmentBuffer);
+                    #ifdef SERIAL_DEBUG
+                        Serial.print("Altitude = ");
+                        Serial.println(segmentBuffer);
+                    #endif
                     break;
                 case 10:// altitude unit
                 case 11: // ?
@@ -431,6 +441,11 @@ private:
             {
                 case 2: // Fix type
                 {
+                    #ifdef SERIAL_DEBUG
+                        Serial.print("Fix type = ");
+                        Serial.println(segmentBuffer[0]);
+                    #endif
+
                     GPSFIXTYPE newGpsFixType = static_cast<GPSFIXTYPE>(segmentBuffer[0] - '0');
 
                     if (newGpsFixType != gpsFixType)
