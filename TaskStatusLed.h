@@ -8,7 +8,7 @@
     #define NEOPIXEL_PIN D2
 #endif
 #ifdef ARDUINO_PRO_MINI
-    #define NEOPIXEL_PIN 8
+    #define NEOPIXEL_PIN 4
 #endif
 
 #define COLOR_SATURATION 128

@@ -9,8 +9,8 @@
     #define NMEA_MESSAGE_WRITE_PIN D3
 #endif
 #ifdef ARDUINO_PRO_MINI
-    #define NMEA_MESSAGE_READ_PIN 5
-    #define NMEA_MESSAGE_WRITE_PIN 6
+    #define NMEA_MESSAGE_READ_PIN 7
+    #define NMEA_MESSAGE_WRITE_PIN 8
 #endif
 
 enum GPSFIXTYPE
@@ -93,13 +93,13 @@ private:
     virtual bool OnStart() // optional
     {
         #ifdef SERIAL_DEBUG
-            Serial.println("Starting GPS task...");
+            Serial.println(F("Starting GPS task..."));
         #endif
 
         gps.begin(9600);
 
         #ifdef SERIAL_DEBUG
-            Serial.println("GPS task started.");
+            Serial.println(F("GPS task started."));
         #endif
 
         // init state 
@@ -115,13 +115,13 @@ private:
     virtual void OnStop() // optional
     {
         #ifdef SERIAL_DEBUG
-            Serial.println("Stopping GPS task...");
+            Serial.println(F("Stopping GPS task..."));
         #endif
 
         gps.end();
 
         #ifdef SERIAL_DEBUG
-            Serial.println("GPS task stopped.");
+            Serial.println(F("GPS task stopped."));
         #endif
         
         // if we have any readings when asked to stop
@@ -207,7 +207,7 @@ private:
                     // $GPRMC: Time, date, position, course and speed data
                     sentence = NMEA_SENTENCE_GPRMC;
                     #ifdef SERIAL_DEBUG
-                        Serial.println("Interpreting NMEA_SENTENCE_GPRMC");
+                        Serial.println(F("Interpreting NMEA_SENTENCE_GPRMC"));
                     #endif
 
                     return true;  // start of a new reading, for now we trigger on this
@@ -220,7 +220,7 @@ private:
                         // $GPGGA: Time, position, and fix related data of the receiver.
                         sentence = NMEA_SENTENCE_GPGGA;
                         #ifdef SERIAL_DEBUG
-                            Serial.println("Interpreting NMEAIAL_DEBUG_GPGGA");
+                            Serial.println(F("Interpreting NMEAIAL_DEBUG_GPGGA"));
                         #endif
                     }
                     else if (segmentBuffer[3] == 'S')
@@ -230,7 +230,7 @@ private:
                             // $GPGSA: IDs of satellites which are used for position fix.
                             sentence = NMEA_SENTENCE_GPGSA;
                             #ifdef SERIAL_DEBUG
-                                Serial.println("Interpreting NMEA_SENTENCE_GPGSA");
+                                Serial.println(F("Interpreting NMEA_SENTENCE_GPGSA"));
                             #endif
                         }
                         else if (segmentBuffer[4] == 'V')
@@ -238,7 +238,7 @@ private:
                             // $GPGSV: Satellite information about elevation, azimuth and CNR.
                             sentence = NMEA_SENTENCE_GPGSV;
                             #ifdef SERIAL_DEBUG
-                                Serial.println("Interpreting NMEA_SENTENCE_GPGSV");
+                                Serial.println(F("Interpreting NMEA_SENTENCE_GPGSV"));
                             #endif
                         }
                     }
@@ -247,7 +247,7 @@ private:
                         // $GPGLL: Position, time and fix status.
                         sentence = NMEA_SENTENCE_GPGLL;
                         #ifdef SERIAL_DEBUG
-                            Serial.println("Interpreting NMEA_SENTENCE_GPGLL");
+                            Serial.println(F("Interpreting NMEA_SENTENCE_GPGLL"));
                         #endif
                     }
                 }
@@ -256,7 +256,7 @@ private:
                     // $GPVTG: Course and speed relative to the ground.
                     sentence = NMEA_SENTENCE_GPVTG;
                     #ifdef SERIAL_DEBUG
-                        Serial.println("Interpreting NMEAIAL_DEBUG_GPVTG");
+                        Serial.println(F("Interpreting NMEAIAL_DEBUG_GPVTG"));
                     #endif
                 }
             }
@@ -267,7 +267,7 @@ private:
                     // $GPRMC: Time, date, position, course and speed data
                     sentence = NMEA_SENTENCE_GNRMC;
                     #ifdef SERIAL_DEBUG
-                        Serial.println("Interpreting NMEA_SENTENCE_GPRMC");
+                        Serial.println(F("Interpreting NMEA_SENTENCE_GPRMC"));
                     #endif
 
                     return true;  // start of a new reading, for now we trigger on this
@@ -413,7 +413,7 @@ private:
                 case 7: // number of satellites
                     strcpy(readings[activeReadingIndex].satelliteCount, segmentBuffer);
                     #ifdef SERIAL_DEBUG
-                        Serial.print("Satellites = ");
+                        Serial.print(F("Satellites = "));
                         Serial.println(segmentBuffer);
                     #endif
                     break;
@@ -422,7 +422,7 @@ private:
                 case 9: // altitude
                     strcpy(readings[activeReadingIndex].altitude, segmentBuffer);
                     #ifdef SERIAL_DEBUG
-                        Serial.print("Altitude = ");
+                        Serial.print(F("Altitude = "));
                         Serial.println(segmentBuffer);
                     #endif
                     break;
@@ -442,7 +442,7 @@ private:
                 case 2: // Fix type
                 {
                     #ifdef SERIAL_DEBUG
-                        Serial.print("Fix type = ");
+                        Serial.print(F("Fix type = "));
                         Serial.println(segmentBuffer[0]);
                     #endif
 

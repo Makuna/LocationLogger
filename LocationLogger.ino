@@ -1,6 +1,6 @@
 //#define SERIAL_DEBUG
-#define WEMOS_D1_MINI
-//#define ARDUINO_PRO_MINI
+//#define WEMOS_D1_MINI
+#define ARDUINO_PRO_MINI
 
 #include <SdFat.h>
 #include <Task.h>
@@ -8,13 +8,16 @@
 #include "TaskStatusLed.h"
 #include "TaskGps.h"
 #include "TaskButton.h"
-#include "ESP8266WiFi.h"
+
+#ifdef WEMOS_D1_MINI
+  #include "ESP8266WiFi.h"
+#endif
 
 #ifdef WEMOS_D1_MINI
   #define SAFE_EJECT_BUTTON_PIN D3
 #endif
 #ifdef ARDUINO_PRO_MINI
-  #define SAFE_EJECT_BUTTON_PIN 9
+  #define SAFE_EJECT_BUTTON_PIN 2
 #endif
 
 #ifdef WEMOS_D1_MINI
@@ -46,21 +49,26 @@ void setup()
     Serial.println(F("Starting..."));
   #endif
 
-  #ifdef SERIAL_DEBUG
-    Serial.println(F("Turning off Wi-Fi..."));
-  #endif
+  #ifdef WEMOS_D1_MINI
+    #ifdef SERIAL_DEBUG
+      Serial.println(F("Turning off Wi-Fi..."));
+    #endif
 
-  WiFi.mode(WIFI_OFF);
-  WiFi.forceSleepBegin();
-  delay(1);
+    WiFi.mode(WIFI_OFF);
+    delay(1);
 
-  #ifdef SERIAL_DEBUG
-    Serial.println(F("Wi-Fi off."));
+    #ifdef SERIAL_DEBUG
+      Serial.println(F("Wi-Fi off."));
+    #endif
   #endif
 
   taskManager.StartTask(&taskStatusLed);
 
   taskStatusLed.ShowPowerUp();
+
+  #ifdef SERIAL_DEBUG
+    Serial.println(F("Starting SD..."));
+  #endif
 
   while (!sd.begin(SD_CHIP_SELECT, SPI_HALF_SPEED)) {};
 
@@ -84,7 +92,7 @@ void HandleSafeEjectButtonChange(ButtonState state)
   if (state == ButtonState_Released)
   {
     #ifdef SERIAL_DEBUG
-      Serial.println("Button released.");
+      Serial.println(F("Button released."));
     #endif
 
     if (taskManager.StatusTask(&taskGps) == TaskState_Stopped)
@@ -103,7 +111,7 @@ void HandleSafeEjectButtonChange(ButtonState state)
 void OnGpsFixChanged(GPSFIXTYPE gpsFixType)
 {
   #ifdef SERIAL_DEBUG
-    Serial.print("GPS fix changing to ");
+    Serial.print(F("GPS fix changing to "));
     Serial.println(gpsFixType);
   #endif
 
@@ -166,7 +174,7 @@ void OnGpsReadingComplete(const GpsReading *readings, uint8_t readingCount)
   {
     taskStatusLed.ShowSafeToEject();
     #ifdef SERIAL_DEBUG
-      Serial.println("Safe to eject.");
+      Serial.println(F("Safe to eject."));
     #endif
   }
   else
