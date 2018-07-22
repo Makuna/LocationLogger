@@ -2,7 +2,7 @@
 #include <NeoPixelBus.h>
 
 #define NEOPIXEL_COUNT 1
-#define NEOPIXEL_BLINK_MS 20
+#define NEOPIXEL_BLINK_MS 62
 
 #ifdef WEMOS_D1_MINI
     #define NEOPIXEL_PIN D2
@@ -11,8 +11,9 @@
     #define NEOPIXEL_PIN 4
 #endif
 
-#define COLOR_SATURATION 128
+#define COLOR_SATURATION 64
 
+RgbColor angryRed(255, 0, 0);
 RgbColor red(COLOR_SATURATION, 0, 0);
 RgbColor yellow(COLOR_SATURATION, COLOR_SATURATION, 0);
 RgbColor green(0, COLOR_SATURATION, 0);
@@ -24,8 +25,12 @@ class TaskStatusLed : public Task
 {
 public:
     TaskStatusLed() : // pass any custom arguments you need
-        Task(NEOPIXEL_BLINK_MS),
-        strip(NEOPIXEL_COUNT, NEOPIXEL_PIN) // initialize members here
+        Task(MsToTaskTime(NEOPIXEL_BLINK_MS)),
+        strip(NEOPIXEL_COUNT, NEOPIXEL_PIN), // initialize members here
+        flashColor(black),
+        patternIndex(-1),
+        pattern(0),
+        repeat(false)
     { };
 
     void ShowPowerUp()
@@ -41,7 +46,7 @@ public:
 
     void ShowFileWritten()
     {
-        pattern = 0b1000000000000000;
+        pattern = 0b1100000000000000;
         repeat = false;
         patternIndex = 15;
         flashColor = red;
@@ -49,15 +54,15 @@ public:
 
     void ShowFileOpenError()
     {
-        pattern = 0b101010000000000;
+        pattern = 0b1100011000000000;
         repeat = false;
         patternIndex = 15;
-        flashColor = red;
+        flashColor = angryRed;
     }
 
     void ShowSafeToEject()
     {
-        pattern = 0b1000000000000000;
+        pattern = 0b1100000000000000;
         repeat = true;
         patternIndex = 15;
         flashColor = green;
@@ -65,7 +70,7 @@ public:
 
     void ShowNoFix()
     {
-        pattern = 0b1010100000000000;
+        pattern = 0b1100011000110000;
         repeat = true;
         patternIndex = 15;
         flashColor = blue;
@@ -73,7 +78,7 @@ public:
 
     void ShowFix()
     {
-        pattern = 0b1000100010000000;
+        pattern = 0b1100011000110000;
         repeat = false;
         patternIndex = 15;
         flashColor = green;
@@ -81,13 +86,13 @@ public:
 
     void ShowStartRecording()
     {
-        pattern = 0b100010001000000;
+        pattern = 0b1100110011001100;
         repeat = false;
         patternIndex = 15;
         flashColor = red;
     }
 
-    void Stop()
+    void StopShowing()
     {
         pattern = 0b0;
         repeat = false;
@@ -97,7 +102,7 @@ public:
 
 private:
     // put member variables here that are scoped to this object
-    NeoPixelBus<NeoGrbwFeature, Neo800KbpsMethod> strip;
+    NeoPixelBus<NeoGrbwFeature, NeoWs2813Method> strip;
     RgbColor flashColor;
     int8_t patternIndex;
     uint16_t pattern;
@@ -120,15 +125,11 @@ private:
     {
         if (patternIndex >= 0)
         {
-		    bool indexState = ((pattern >> patternIndex) & 0b1) > 0;
+		    bool indexState = (((pattern >> patternIndex) & 0b00000001) > 0);
 
             strip.SetPixelColor(0, indexState ? flashColor : black);
             strip.Show();
             
-            if (patternIndex > 0 && (pattern << (16 - patternIndex)) == 0) {
-                patternIndex = 1;
-            }
-		
             patternIndex--;
 
             if (repeat && patternIndex == -1)

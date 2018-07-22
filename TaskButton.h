@@ -14,7 +14,7 @@ public:
     typedef void(*action)(ButtonState state);
 
     TaskButton(action function, uint8_t pin) :
-        Task(MsToTaskTime(3)), // check every three millisecond, 1-10 ms should be ok
+        Task(MsToTaskTime(2)), // check every three millisecond, 1-10 ms should be ok
         _buttonPin(pin),
         _callback(function)
     { 
@@ -102,6 +102,11 @@ private:
                 {
                     _timer -= deltaTimeMs;
                 }
+                break;
+
+            default:
+                // no way to get here due to previous if, but
+                // added to suppress the warning
                 break;
             }
         }

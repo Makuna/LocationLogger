@@ -59,17 +59,19 @@ class TaskGps : public Task
 {
 public:
     TaskGps(GpsReadingComplete gpsReadingCompleteFunction, GpsFixChanged gpsFixChangedCallbackFunction) : // pass any custom arguments you need
-        Task(10), // check every 10 ms
+        Task(MsToTaskTime(2)), // check every 2 ms
         gpsReadingCompleteCallback(gpsReadingCompleteFunction),
         gpsFixChangedCallback(gpsFixChangedCallbackFunction),
+        gps(NMEA_MESSAGE_READ_PIN, NMEA_MESSAGE_WRITE_PIN),
         activeReadingIndex(0),
         bufferIndex(0),
         segment(-1),
         sentence(NMEA_SENTENCE_Unknown),
-        gpsFixType(GPSFIXTYPE_NOFIX),
-        gps(NMEA_MESSAGE_READ_PIN, NMEA_MESSAGE_WRITE_PIN)
+        gpsFixType(GPSFIXTYPE_NOFIX)
     { 
         memset(readings, 0, sizeof(readings));
+
+        gps.begin(9600);
     };
 
 
@@ -92,11 +94,11 @@ private:
 
     virtual bool OnStart() // optional
     {
-        #ifdef SERIAL_DEBUG
-            Serial.println(F("Starting GPS task..."));
+        #ifdef SIMPLE_DEBUG
+            Serial.println(F("GPS go"));
         #endif
 
-        gps.begin(9600);
+        gps.listen();
 
         #ifdef SERIAL_DEBUG
             Serial.println(F("GPS task started."));
@@ -114,11 +116,11 @@ private:
 
     virtual void OnStop() // optional
     {
-        #ifdef SERIAL_DEBUG
-            Serial.println(F("Stopping GPS task..."));
+        #ifdef SIMPLE_DEBUG
+            Serial.println(F("GPS stop"));
         #endif
 
-        gps.end();
+        gps.stopListening();
 
         #ifdef SERIAL_DEBUG
             Serial.println(F("GPS task stopped."));
@@ -129,6 +131,7 @@ private:
         {
             // inform gpsReadingCompleteCallback on number of readings we have
             gpsReadingCompleteCallback(readings, activeReadingIndex);
+            memset(readings, 0, sizeof(readings));
         }
     }
 
@@ -150,6 +153,7 @@ private:
                         {
                             activeReadingIndex = 0;
                             gpsReadingCompleteCallback(readings, READINGS_SIZE);
+                            memset(readings, 0, sizeof(readings));
                         }
                     }
                 }
@@ -209,9 +213,6 @@ private:
                     #ifdef SERIAL_DEBUG
                         Serial.println(F("Interpreting NMEA_SENTENCE_GPRMC"));
                     #endif
-
-                    return true;  // start of a new reading, for now we trigger on this
-                    // $REVIEW - need to trigger after the last sentence we require has been fully read
                 }
                 else if (segmentBuffer[2] == 'G')
                 {
@@ -269,9 +270,6 @@ private:
                     #ifdef SERIAL_DEBUG
                         Serial.println(F("Interpreting NMEA_SENTENCE_GPRMC"));
                     #endif
-
-                    return true;  // start of a new reading, for now we trigger on this
-                    // $REVIEW - need to trigger after the last sentence we require has been fully read
                 }
                 else if (segmentBuffer[2] == 'G')
                 {
@@ -282,6 +280,9 @@ private:
                         #ifdef SERIAL_DEBUG
                             Serial.println(F("Interpreting NMEAIAL_DEBUG_GPGGA"));
                         #endif
+                        return true;  // start of a new reading, for now we trigger on this
+// $REVIEW - need to trigger after the last sentence we require has been fully read
+
                     }
                     else if (segmentBuffer[3] == 'S')
                     {

@@ -1,4 +1,5 @@
 //#define SERIAL_DEBUG
+#define SIMPLE_DEBUG
 //#define WEMOS_D1_MINI
 #define ARDUINO_PRO_MINI
 
@@ -9,22 +10,19 @@
 #include "TaskGps.h"
 #include "TaskButton.h"
 
+
 #ifdef WEMOS_D1_MINI
+
   #include "ESP8266WiFi.h"
-#endif
-
-#ifdef WEMOS_D1_MINI
   #define SAFE_EJECT_BUTTON_PIN D3
-#endif
-#ifdef ARDUINO_PRO_MINI
-  #define SAFE_EJECT_BUTTON_PIN 2
-#endif
-
-#ifdef WEMOS_D1_MINI
   #define SD_CHIP_SELECT D8 // D8
+
 #endif
 #ifdef ARDUINO_PRO_MINI
+
+  #define SAFE_EJECT_BUTTON_PIN 2
   #define SD_CHIP_SELECT 10
+
 #endif
 
 // foreward declare functions passed to task constructors
@@ -43,7 +41,7 @@ SdFile logFile;
 
 void setup()
 {
-  #ifdef SERIAL_DEBUG
+  #ifdef SIMPLE_DEBUG
     Serial.begin(115200);
     while (!Serial) {}
     Serial.println(F("Starting..."));
@@ -66,24 +64,24 @@ void setup()
 
   taskStatusLed.ShowPowerUp();
 
-  #ifdef SERIAL_DEBUG
+  #ifdef SIMPLE_DEBUG
     Serial.println(F("Starting SD..."));
   #endif
 
-  while (!sd.begin(SD_CHIP_SELECT, SPI_HALF_SPEED)) {};
+  while (!sd.begin(SD_CHIP_SELECT)) {};
 
-  #ifdef SERIAL_DEBUG
+  #ifdef SIMPLE_DEBUG
     Serial.println(F("SD started."));
   #endif
 
-  taskStatusLed.Stop();
+  //taskStatusLed.StopShowing();
   taskManager.StartTask(&AButtonTask);
   taskManager.StartTask(&taskGps);
 }
 
 void loop()
 {
-  taskManager.Loop();
+  taskManager.Loop(WDTO_2S);
 }
 
 void HandleSafeEjectButtonChange(ButtonState state)
@@ -95,12 +93,15 @@ void HandleSafeEjectButtonChange(ButtonState state)
       Serial.println(F("Button released."));
     #endif
 
-    if (taskManager.StatusTask(&taskGps) == TaskState_Stopped)
+    if (taskGps.getTaskState() == TaskState_Stopped)
     {
-      taskManager.StartTask(&taskGps);
+      // must reinit if a card was inserted
+      while (!sd.begin(SD_CHIP_SELECT)) {};
+
       taskStatusLed.ShowStartRecording();
+      taskManager.StartTask(&taskGps);
     }
-    else if (taskManager.StatusTask(&taskGps) == TaskState_Running)
+    else if (taskGps.getTaskState() == TaskState_Running)
     {
       taskManager.StopTask(&taskGps);
       taskStatusLed.ShowSafeToEject();
@@ -110,27 +111,34 @@ void HandleSafeEjectButtonChange(ButtonState state)
 
 void OnGpsFixChanged(GPSFIXTYPE gpsFixType)
 {
+  #ifdef SIMPLE_DEBUG
+    Serial.print(F("^"));
+    Serial.println(gpsFixType);
+  #endif
+
   #ifdef SERIAL_DEBUG
     Serial.print(F("GPS fix changing to "));
     Serial.println(gpsFixType);
   #endif
-
+  
   switch (gpsFixType)
   {
     case GPSFIXTYPE_NOFIX:
       taskStatusLed.ShowNoFix();
       break;
+
     case GPSFIXTYPE_2DFIX:
     case GPSFIXTYPE_3DFIX:
       taskStatusLed.ShowFix();
       break;
   }
+  
 }
 
-void OnGpsReadingComplete(const GpsReading *readings, uint8_t readingCount)
+void OnGpsReadingComplete(const GpsReading* readings, uint8_t readingCount)
 {
-  #ifdef SERIAL_DEBUG
-    Serial.println(F("Writing readings..."));
+  #ifdef SIMPLE_DEBUG
+    Serial.print(F(">> "));
   #endif
 
   char lastHourWritten[2];
@@ -139,87 +147,83 @@ void OnGpsReadingComplete(const GpsReading *readings, uint8_t readingCount)
 
   for (int i = 0; i < readingCount; i++)
   {
-    if (readings[i].time[0] != lastHourWritten[0] || readings[i].time[1] != lastHourWritten[1])
+    // skip empty times completely
+    if (readings[i].time[0] != '\0' && readings[i].time[1] != '\0')
     {
-      SwitchFiles(readings[i].date, readings[i].time);
-      lastHourWritten[0] = readings[i].time[0];
-      lastHourWritten[1] = readings[i].time[1];
-    }
+        if (readings[i].time[0] != lastHourWritten[0] || 
+                readings[i].time[1] != lastHourWritten[1])
+        {
+          logFile.close();
+          if (!OpenFile(readings[i].date, readings[i].time))
+          {
+              // blink red three times to indicate SD problem
 
-    #ifdef SERIAL_DEBUG
-        Serial.print(F("Writing reading "));
-        Serial.println(i);
+              taskStatusLed.ShowFileOpenError();
+
+    #ifdef SIMPLE_DEBUG
+            Serial.println(F("Error opening file."));
     #endif
+            continue; // skip tp next next reading
+          }
 
-    logFile.print(readings[i].date);
-    logFile.print(',');
-    logFile.print(readings[i].time);
-    logFile.print(',');
-    logFile.print(readings[i].latitude);
-    logFile.print(',');
-    logFile.print(readings[i].latitudeDirection);
-    logFile.print(',');
-    logFile.print(readings[i].longitude);
-    logFile.print(',');
-    logFile.print(readings[i].longitudeDirection);
-    logFile.print(',');
-    logFile.print(readings[i].altitude);
-    logFile.print(',');
-    logFile.println(readings[i].satelliteCount);
+          lastHourWritten[0] = readings[i].time[0];
+          lastHourWritten[1] = readings[i].time[1];
+        }
+
+        #ifdef SERIAL_DEBUG
+            Serial.print(F("Writing reading "));
+            Serial.println(i);
+        #endif
+
+        logFile.print(readings[i].date);
+        logFile.print(',');
+        logFile.print(readings[i].time);
+        logFile.print(',');
+        logFile.print(readings[i].latitude);
+        logFile.print(',');
+        logFile.print(readings[i].latitudeDirection);
+        logFile.print(',');
+        logFile.print(readings[i].longitude);
+        logFile.print(',');
+        logFile.print(readings[i].longitudeDirection);
+        logFile.print(',');
+        logFile.print(readings[i].altitude);
+        logFile.print(',');
+        logFile.println(readings[i].satelliteCount);
+      }
   }
 
   logFile.close();
 
-  if (taskManager.StatusTask(&taskGps) != TaskState_Running)
+  if (taskGps.getTaskState() == TaskState_Stopped)
   {
     taskStatusLed.ShowSafeToEject();
-    #ifdef SERIAL_DEBUG
-      Serial.println(F("Safe to eject."));
-    #endif
   }
   else
   {
     taskStatusLed.ShowFileWritten();
   }
+
+  #ifdef SIMPLE_DEBUG
+    Serial.println(F("<<"));
+  #endif
 }
 
-bool SwitchFiles(const char *date, const char *time)
+bool OpenFile(const char* date, const char* time)
 {
   char fileName[] = "000000-0.CSV";
 
-  #ifdef SERIAL_DEBUG
-    Serial.println(F("Changing files..."));
-  #endif
-
-  if (logFile.isOpen())
-  {
-    logFile.close();
-  }
-
   EncodeFileName(fileName, date, time);
 
-  #ifdef SERIAL_DEBUG
-    Serial.print(F("File name: "));
-    Serial.println(fileName);
+  #ifdef SIMPLE_DEBUG
+    Serial.print(fileName);
+    Serial.print(' ');
   #endif
 
-  if (!logFile.open(fileName, O_WRITE | O_CREAT | O_AT_END))
-  {
-    // blink red three times to indicate SD problem
-
-    taskStatusLed.ShowFileOpenError();
-
-    #ifdef SERIAL_DEBUG
-        Serial.println(F("Error opening file."));
-    #endif
-
-    return false;
-  }
-
-  return true;
+  return logFile.open(fileName, O_WRITE | O_CREAT | O_AT_END);
 }
 
-void EncodeFileName(char *fileName, const char *date, const char *time)
+void EncodeFileName(char* fileName, const char* date, const char* time)
 {
   fileName[0] = date[4];
   fileName[1] = date[5];
