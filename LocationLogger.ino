@@ -1,5 +1,5 @@
 //#define SERIAL_DEBUG
-#define SIMPLE_DEBUG
+//#define SIMPLE_DEBUG
 //#define WEMOS_D1_MINI
 #define ARDUINO_PRO_MINI
 
@@ -141,9 +141,7 @@ void OnGpsReadingComplete(const GpsReading* readings, uint8_t readingCount)
     Serial.print(F(">> "));
   #endif
 
-  char lastHourWritten[2];
-  lastHourWritten[0] = 'x';
-  lastHourWritten[1] = 'x';
+  char lastHourWritten[] = {'x', 'x'};
 
   for (int i = 0; i < readingCount; i++)
   {
@@ -161,7 +159,7 @@ void OnGpsReadingComplete(const GpsReading* readings, uint8_t readingCount)
               taskStatusLed.ShowFileOpenError();
 
     #ifdef SIMPLE_DEBUG
-            Serial.println(F("Error opening file."));
+            Serial.print(F(" open failed "));
     #endif
             continue; // skip tp next next reading
           }

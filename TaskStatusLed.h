@@ -46,18 +46,24 @@ public:
 
     void ShowFileWritten()
     {
-        pattern = 0b1100000000000000;
-        repeat = false;
-        patternIndex = 15;
-        flashColor = red;
+        if (!repeat) // do not reset any repeating states
+        {
+            pattern = 0b1100000000000000;
+            repeat = false;
+            patternIndex = 15;
+            flashColor = red;
+        }
     }
 
     void ShowFileOpenError()
     {
-        pattern = 0b1100011000000000;
-        repeat = false;
-        patternIndex = 15;
-        flashColor = angryRed;
+        if (!repeat) // do not reset any repeating states
+        {
+            pattern = 0b1100011000000000;
+            repeat = false;
+            patternIndex = 15;
+            flashColor = angryRed;
+        }
     }
 
     void ShowSafeToEject()
@@ -94,7 +100,7 @@ public:
 
     void StopShowing()
     {
-        pattern = 0b0;
+        pattern = 0;
         repeat = false;
         patternIndex = 0;
         flashColor = black;
@@ -117,6 +123,7 @@ private:
         pattern = 0;
         patternIndex = -1;
         repeat = false;
+        flashColor = black;
 
         return true;
     }
@@ -125,9 +132,18 @@ private:
     {
         if (patternIndex >= 0)
         {
-		    bool indexState = (((pattern >> patternIndex) & 0b00000001) > 0);
+            RgbColor color;
 
-            strip.SetPixelColor(0, indexState ? flashColor : black);
+            if (((pattern >> patternIndex) & 1) > 0)
+            {
+                color = flashColor;
+            }
+            else
+            {
+                color = black;
+            }
+
+            strip.SetPixelColor(0, color);
             strip.Show();
             
             patternIndex--;
